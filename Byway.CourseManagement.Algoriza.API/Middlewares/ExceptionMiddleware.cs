@@ -13,6 +13,7 @@ namespace Byway.CourseManagement.Algoriza.API.Middlewares
         {
             try
             {
+                context.Response.Headers.Add("Cross-Origin-Opener-Policy", "same-origin-allow-popups");
                 await _next.Invoke(context);
             }
             catch(Exception ex)

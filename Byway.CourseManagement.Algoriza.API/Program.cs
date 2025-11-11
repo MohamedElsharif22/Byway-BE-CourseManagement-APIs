@@ -9,6 +9,7 @@ using Byway.Domain.Entities;
 using Byway.Infrastructure.DependancyInjection;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.OpenApi.Models;
 using Scalar.AspNetCore;
 using System.Reflection;
 using System.Text.Json;
@@ -39,11 +40,39 @@ namespace Byway.CourseManagement.Algoriza.API
 
             builder.Services.AddMemoryCache();
 
-            //builder.Services.AddIdentity<User, IdentityRole>();
             // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
             builder.Services.AddOpenApi();
             builder.Services.AddEndpointsApiExplorer();
-            builder.Services.AddSwaggerGen();
+            builder.Services.AddSwaggerGen(options =>
+            {
+                options.SwaggerDoc("v1", new() { Title = "Byway Course Management System", Version = "v1" });
+
+                options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+                {
+                    Name = "Authorization",
+                    Type = SecuritySchemeType.ApiKey,
+                    Scheme = "Bearer",
+                    BearerFormat = "JWT",
+                    In = ParameterLocation.Header,
+                    Description = "Enter your JWT token here. Example: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6..."
+                });
+
+                options.AddSecurityRequirement(new OpenApiSecurityRequirement
+                {
+                    {
+                        new OpenApiSecurityScheme
+                        {
+                            Reference = new OpenApiReference
+                            {
+                                Type = ReferenceType.SecurityScheme,
+                                Id = "Bearer"
+                            }
+                        },
+                        Array.Empty<string>()
+                    }
+                });
+            });
+
 
             //Confiure Api Invalid Model State Response
             builder.Services.AddApiInvalidModelStateConfiguration();
@@ -53,10 +82,24 @@ namespace Byway.CourseManagement.Algoriza.API
             {
                 options.AddPolicy("wepPolicy", policyConfig =>
                 {
-                    policyConfig.WithOrigins(builder.Configuration["FrontendOrigins:AdminHosted"], 
-                                             builder.Configuration["FrontendOrigins:AdminLocal"])
-                                .AllowAnyHeader()
-                                .AllowAnyMethod();
+                    policyConfig.SetIsOriginAllowed(origin =>
+                    {
+                        Console.WriteLine($"CORS Request from origin: {origin}");
+
+                        var allowed = new[]
+                        {
+                            builder.Configuration["FrontendOrigins:AdminHosted"],
+                            builder.Configuration["FrontendOrigins:AdminLocal"]
+                        }.Where(o => !string.IsNullOrEmpty(o));
+
+                        var isAllowed = allowed.Contains(origin);
+                        Console.WriteLine($"Origin allowed: {isAllowed}");
+
+                        return isAllowed;
+                    })
+                    .AllowAnyHeader()
+                    .AllowAnyMethod()
+                    .AllowCredentials();
                 });
             });
 
@@ -67,11 +110,11 @@ namespace Byway.CourseManagement.Algoriza.API
             await app.MiagrateAndSeedDatabasesAsync();
 
             // Configure the HTTP request pipeline.
+            app.MapOpenApi();
+            app.UseSwagger();
+            app.UseSwaggerUI();
             if (app.Environment.IsDevelopment())
             {
-                app.MapOpenApi();
-                app.UseSwagger();
-                app.UseSwaggerUI();
                 app.MapScalarApiReference();
             }
 
